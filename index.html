@@ -1,0 +1,1042 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ループ切り抜き</title>
+<style>
+:root{
+  --bg:#f5f4ef; --panel:#ffffff; --ink:#1c1e1d; --muted:#686d6a; --line:#dad8cf;
+  --accent:#0f766e; --accent-ink:#ffffff; --accent-soft:#d8eee8;
+  --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --track:#e6e4db;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131514; --panel:#1c1f1e; --ink:#ecece7; --muted:#9a9f9b; --line:#323736;
+    --accent:#2dd4bf; --accent-ink:#06201c; --accent-soft:#113530;
+    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --track:#2a2e2d;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 "Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:28px 16px 64px}
+h1{font-size:22px; margin:0 0 4px; letter-spacing:.02em}
+h2{font-size:15px; margin:30px 0 10px; display:flex; align-items:center; gap:8px}
+h2 .n{display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:12px; font-weight:700}
+.lead{margin:0 0 22px; color:var(--muted); font-size:13.5px}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px}
+.note{color:var(--muted); font-size:13px; margin:8px 0 0}
+[hidden]{display:none!important}
+
+/* drop */
+.drop{
+  display:grid; place-items:center; text-align:center; gap:6px;
+  min-height:220px; padding:28px 16px; cursor:pointer;
+  border:2px dashed var(--line); border-radius:14px; background:var(--panel);
+  transition:border-color .15s, background .15s;
+}
+.drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-soft)}
+.drop b{font-size:17px}
+.drop small{color:var(--muted)}
+.drop .btn{margin-top:6px}
+details.adv{margin-top:12px; font-size:13.5px}
+details.adv summary{cursor:pointer; color:var(--muted)}
+.advgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-top:10px}
+
+label.f{display:grid; gap:4px; font-size:13px; color:var(--muted)}
+select,button,input{font:inherit; color:inherit}
+select{
+  padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--ink);
+}
+.btn{
+  appearance:none; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+  padding:8px 14px; border-radius:9px; cursor:pointer; font-weight:600; font-size:14px;
+}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.btn.pri:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.btn.sm{padding:3px 9px; font-size:13px; font-weight:600}
+
+/* busy */
+.bar{height:8px; border-radius:99px; background:var(--track); overflow:hidden}
+.bar>i{display:block; height:100%; width:0; background:var(--accent); transition:width .12s}
+.err{margin-top:14px; padding:12px 14px; border-radius:10px; border:1px solid var(--bad); color:var(--bad); background:transparent}
+
+/* src bar */
+.src{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; justify-content:space-between}
+.src .meta{font-size:13px; color:var(--muted); overflow-wrap:anywhere}
+.src .meta b{color:var(--ink)}
+
+/* candidates */
+.cands{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px}
+.card{
+  appearance:none; text-align:left; padding:0; overflow:hidden; cursor:pointer;
+  background:var(--panel); border:2px solid var(--line); border-radius:12px;
+}
+.card:hover{border-color:var(--muted)}
+.card.on{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.card canvas{display:block; width:100%; height:auto; background:#000}
+.card .ci{padding:8px 10px 10px; font-size:12.5px; color:var(--muted); line-height:1.5}
+.card .ci .t{display:flex; justify-content:space-between; align-items:center; color:var(--ink); font-size:13.5px; font-weight:700}
+.badge{font-size:12px; font-weight:700; padding:1px 8px; border-radius:99px; background:var(--accent-soft); color:var(--accent)}
+.badge.mid{background:transparent; border:1px solid var(--warn); color:var(--warn)}
+.badge.low{background:transparent; border:1px solid var(--bad); color:var(--bad)}
+
+/* editor */
+.editor{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:16px; align-items:start}
+@media (max-width:820px){ .editor{grid-template-columns:1fr} }
+.stage canvas{display:block; width:100%; height:auto; background:#000; border-radius:8px}
+.tlrow{display:flex; align-items:center; gap:10px; margin-top:10px}
+.tl{position:relative; flex:1; height:22px; border-radius:6px; background:var(--track); overflow:hidden}
+.tl .seg{position:absolute; top:13px; height:6px; border-radius:3px; background:var(--muted); opacity:.55}
+.tl .sel{position:absolute; top:0; bottom:0; background:var(--accent); opacity:.38}
+.tl .head{position:absolute; top:0; bottom:0; width:2px; background:var(--accent)}
+.ctl{display:grid; gap:8px; margin-top:12px}
+.ctlrow{display:grid; grid-template-columns:44px auto 1fr; align-items:center; gap:8px; font-size:13px}
+.ctlrow .lbl{color:var(--muted)}
+.ctlrow .btns{display:flex; gap:4px}
+.ctlrow input[type=range]{width:100%; accent-color:var(--accent)}
+.ctlrow .val{grid-column:2 / -1; color:var(--muted); font-size:12.5px; margin-top:-4px}
+.sumline{margin-top:10px; font-size:13.5px; display:flex; flex-wrap:wrap; gap:4px 16px}
+.sumline b{font-weight:700}
+.q-hi{color:var(--ok)} .q-mid{color:var(--warn)} .q-low{color:var(--bad)}
+
+.seg2{display:flex; gap:8px}
+.seg2 label{flex:1; position:relative}
+.seg2 input{position:absolute; opacity:0; inset:0; cursor:pointer}
+.seg2 span{display:block; text-align:center; padding:9px 0; border:2px solid var(--line); border-radius:10px; font-weight:700; background:var(--panel)}
+.seg2 input:checked + span{border-color:var(--accent); background:var(--accent-soft); color:var(--accent)}
+.seg2 input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px}
+.seg2 input:disabled + span{opacity:.45}
+.form{display:grid; gap:12px}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.est{font-size:13px; color:var(--muted); padding:8px 10px; border-radius:8px; background:var(--bg)}
+.result{margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:grid; gap:10px}
+.result img,.result video{max-width:100%; max-height:260px; border-radius:8px; background:#000; justify-self:start}
+.hidden-video{position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none}
+footer{margin-top:40px; color:var(--muted); font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ループ切り抜き</h1>
+  <p class="lead">アニメーション動画をドロップすると、ループできる区間を探して複数提案します。気に入ったものを選んで、GIF または MP4 で保存できます。処理はすべてこのブラウザ内で行われ、動画が外部に送信されることはありません。</p>
+
+  <section id="drop" class="drop" tabindex="0" role="button" aria-label="動画ファイルを選択">
+    <div>
+      <b>動画をここにドロップ</b><br>
+      <small>mp4 / mov / webm ・ 数秒〜1分程度のアニメーション向け</small><br>
+      <span class="btn pri" style="display:inline-block">ファイルを選ぶ</span>
+    </div>
+    <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v,.webm" hidden>
+  </section>
+
+  <details class="adv" id="adv">
+    <summary>詳細設定</summary>
+    <div class="advgrid">
+      <label class="f">最短ループ長
+        <select id="optMin"><option value="0.3">0.3秒</option><option value="0.5" selected>0.5秒</option><option value="1">1秒</option><option value="2">2秒</option></select>
+      </label>
+      <label class="f">提案する候補の数
+        <select id="optMax"><option value="4">4</option><option value="6" selected>6</option><option value="8">8</option><option value="12">12</option></select>
+      </label>
+      <label class="f">解析フレームレート
+        <select id="optFps"><option value="auto" selected>自動（元の動画に合わせる）</option><option value="30">30fps まで</option><option value="24">24fps まで</option><option value="15">15fps まで</option><option value="12">12fps まで</option></select>
+      </label>
+    </div>
+    <p class="note">最短ループ長・候補数は解析後でも変更して再検索できます。解析フレームレートは次に読み込む動画から有効です。</p>
+  </details>
+
+  <section id="busy" class="panel" hidden style="margin-top:16px">
+    <div id="busyMsg" style="margin-bottom:10px">読み込み中…</div>
+    <div class="bar"><i id="busyBar"></i></div>
+    <p class="note">フレームを1枚ずつ正確に読み込むため、動画の長さや解像度によっては数十秒かかることがあります。</p>
+  </section>
+  <div id="err" class="err" hidden></div>
+
+  <section id="results" hidden>
+    <div class="panel src" style="margin-top:16px">
+      <div class="meta" id="srcInfo"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn sm" id="research" type="button">この条件で再検索</button>
+        <button class="btn sm" id="again" type="button">別の動画を選ぶ</button>
+      </div>
+    </div>
+
+    <h2><span class="n">1</span>ループ候補を選ぶ</h2>
+    <div id="cands" class="cands"></div>
+    <p class="note" id="candNote"></p>
+
+    <h2><span class="n">2</span>確認して書き出す</h2>
+    <div class="editor">
+      <div class="panel stage">
+        <canvas id="pv" width="320" height="180"></canvas>
+        <div class="tlrow">
+          <button class="btn sm" id="play" type="button" aria-label="一時停止">⏸</button>
+          <div class="tl" id="tl"><div class="sel" id="tlSel"></div><div class="head" id="tlHead"></div></div>
+        </div>
+        <div class="ctl" id="ctl">
+          <div class="ctlrow">
+            <span class="lbl">開始</span>
+            <span class="btns"><button class="btn sm" data-act="a-" type="button">−1f</button><button class="btn sm" data-act="a+" type="button">+1f</button></span>
+            <input type="range" id="aSl" min="0" max="1" value="0" aria-label="開始フレーム">
+            <span class="val" id="aLbl"></span>
+          </div>
+          <div class="ctlrow">
+            <span class="lbl">終了</span>
+            <span class="btns"><button class="btn sm" data-act="b-" type="button">−1f</button><button class="btn sm" data-act="b+" type="button">+1f</button></span>
+            <input type="range" id="bSl" min="1" max="2" value="1" aria-label="終了フレーム">
+            <span class="val" id="bLbl"></span>
+          </div>
+          <div class="ctlrow">
+            <span class="lbl">位相</span>
+            <span class="btns"><button class="btn sm" data-act="s-" type="button">◀ 1f</button><button class="btn sm" data-act="s+" type="button">1f ▶</button></span>
+            <span class="val" style="grid-column:auto; margin:0">長さを保ったまま区間をずらします</span>
+          </div>
+        </div>
+        <div class="sumline" id="sum"></div>
+      </div>
+
+      <div class="panel form">
+        <div class="seg2" role="radiogroup" aria-label="出力形式">
+          <label><input type="radio" name="fmt" value="gif" checked><span>GIF</span></label>
+          <label><input type="radio" name="fmt" value="mp4"><span>MP4</span></label>
+        </div>
+        <div class="row2">
+          <label class="f">横幅<select id="wSel"></select></label>
+          <label class="f">フレームレート<select id="fpsSel"></select></label>
+        </div>
+        <div class="row2" id="mp4opts" hidden>
+          <label class="f">繰り返し回数<select id="repSel"><option value="1">1回（1ループのみ）</option><option value="2">2回</option><option value="3">3回</option><option value="5">5回</option><option value="10">10回</option></select></label>
+          <label class="f">画質<select id="qSel"><option value="0.10">標準</option><option value="0.20" selected>高</option><option value="0.40">最高</option></select></label>
+        </div>
+        <div class="note" id="mp4note" hidden style="margin:0">このブラウザでは MP4 の書き出しが使えません。Chrome / Edge の最新版では利用できます。</div>
+        <div class="est" id="est"></div>
+        <button class="btn pri" id="go" type="button">変換する</button>
+        <div id="expProg" hidden>
+          <div id="expMsg" style="font-size:13px; margin-bottom:6px"></div>
+          <div class="bar"><i id="expBar"></i></div>
+        </div>
+        <div class="result" id="result" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Chrome / Edge の最新版を推奨します。MP4 の書き出しにはブラウザの H.264 エンコード機能（WebCodecs）を使用します。</footer>
+</div>
+
+<script>
+/*LIB-START*/
+/* ------------------------------------------------------------------
+   GIF エンコーダ（LZW・減色・差分フレーム）
+------------------------------------------------------------------ */
+class ByteBuf{
+  constructor(n){ this.b=new Uint8Array(Math.max(64,n|0)); this.n=0; }
+  push(v){
+    if(this.n===this.b.length){ const nb=new Uint8Array(this.b.length*2); nb.set(this.b); this.b=nb; }
+    this.b[this.n++]=v;
+  }
+  bytes(){ return this.b.subarray(0,this.n); }
+}
+const LZW_TABLE=new Uint16Array(1<<20);
+function lzwEncode(idx,minCode){
+  const clear=1<<minCode, eof=clear+1;
+  let nBits=minCode+1, maxcode=(1<<nBits)-1, free=clear+2, clearFlg=false;
+  const buf=new ByteBuf(idx.length/2+1024);
+  let cur=0, curBits=0;
+  const tbl=LZW_TABLE; tbl.fill(0);
+  function out(code){
+    cur|=code<<curBits; curBits+=nBits;
+    while(curBits>=8){ buf.push(cur&255); cur>>>=8; curBits-=8; }
+    if(free>maxcode||clearFlg){
+      if(clearFlg){ nBits=minCode+1; maxcode=(1<<nBits)-1; clearFlg=false; }
+      else{ nBits++; maxcode=(nBits===12)?4096:(1<<nBits)-1; }
+    }
+  }
+  out(clear);
+  let ent=idx[0];
+  for(let p=1;p<idx.length;p++){
+    const c=idx[p], key=(ent<<8)|c, code=tbl[key];
+    if(code!==0){ ent=code; continue; }
+    out(ent); ent=c;
+    if(free<4096){ tbl[key]=free++; }
+    else{ tbl.fill(0); free=clear+2; clearFlg=true; out(clear); }
+  }
+  out(ent); out(eof);
+  if(curBits>0) buf.push(cur&255);
+  return buf.bytes();
+}
+function subBlocks(bytes){
+  const nb=Math.ceil(bytes.length/255);
+  const o=new Uint8Array(bytes.length+nb+1);
+  let p=0,q=0;
+  while(p<bytes.length){ const n=Math.min(255,bytes.length-p); o[q++]=n; o.set(bytes.subarray(p,p+n),q); q+=n; p+=n; }
+  o[q++]=0;
+  return o;
+}
+/* 15bit(5-5-5)ヒストグラムからメディアンカットでパレットを作る */
+function buildPalette(hist,nCol){
+  const bins=[]; for(let i=0;i<32768;i++) if(hist[i]) bins.push(i);
+  const mk=items=>{
+    let rmin=31,rmax=0,gmin=31,gmax=0,bmin=31,bmax=0,cnt=0;
+    for(const b of items){
+      const r=b>>10,g=(b>>5)&31,l=b&31;
+      if(r<rmin)rmin=r; if(r>rmax)rmax=r; if(g<gmin)gmin=g; if(g>gmax)gmax=g; if(l<bmin)bmin=l; if(l>bmax)bmax=l;
+      cnt+=hist[b];
+    }
+    return {items,rmin,rmax,gmin,gmax,bmin,bmax,cnt};
+  };
+  const boxes=[mk(bins)];
+  while(boxes.length<nCol){
+    let best=-1,bs=0;
+    for(let k=0;k<boxes.length;k++){
+      const x=boxes[k]; if(x.items.length<2) continue;
+      const range=Math.max(x.rmax-x.rmin,x.gmax-x.gmin,x.bmax-x.bmin);
+      const sc=range*x.cnt; if(sc>bs){bs=sc;best=k;}
+    }
+    if(best<0) break;
+    const x=boxes[best];
+    const rr=(x.rmax-x.rmin)*1.0, gg=(x.gmax-x.gmin)*1.2, bb=(x.bmax-x.bmin)*0.8;
+    const ch=(rr>=gg&&rr>=bb)?0:(gg>=bb?1:2);
+    const key=ch===0?(b=>b>>10):ch===1?(b=>(b>>5)&31):(b=>b&31);
+    x.items.sort((p,q)=>key(p)-key(q));
+    const half=x.cnt/2; let acc=0,split=0;
+    for(;split<x.items.length-1;split++){ acc+=hist[x.items[split]]; if(acc>=half) break; }
+    split++; if(split>=x.items.length) split=x.items.length-1;
+    boxes.splice(best,1,mk(x.items.slice(0,split)),mk(x.items.slice(split)));
+  }
+  const palette=new Uint8Array(768);
+  const nb=boxes.length, pr=new Uint8Array(nb), pg=new Uint8Array(nb), pb=new Uint8Array(nb);
+  for(let k=0;k<nb;k++){
+    let r=0,g=0,l=0,c=0;
+    for(const b of boxes[k].items){ const w=hist[b]; r+=(b>>10)*w; g+=((b>>5)&31)*w; l+=(b&31)*w; c+=w; }
+    const r5=Math.round(r/c), g5=Math.round(g/c), b5=Math.round(l/c);
+    pr[k]=(r5<<3)|(r5>>2); pg[k]=(g5<<3)|(g5>>2); pb[k]=(b5<<3)|(b5>>2);
+    palette[k*3]=pr[k]; palette[k*3+1]=pg[k]; palette[k*3+2]=pb[k];
+  }
+  const lut=new Uint8Array(32768);
+  for(let b=0;b<32768;b++){
+    const r5=b>>10,g5=(b>>5)&31,b5=b&31;
+    const r=(r5<<3)|(r5>>2), g=(g5<<3)|(g5>>2), l=(b5<<3)|(b5>>2);
+    let bi=0,bd=1e9;
+    for(let k=0;k<nb;k++){
+      const dr=r-pr[k], dg=g-pg[k], db=l-pb[k];
+      const d=2*dr*dr+4*dg*dg+3*db*db;
+      if(d<bd){bd=d;bi=k;}
+    }
+    lut[b]=bi;
+  }
+  return {palette,lut};
+}
+/* frames: 15bit値の Uint16Array[]（w*h）。palette は 255色＋透過用の予約色。 */
+async function encodeGif(w,h,frames,fps,palette,lut,onProg){
+  const parts=[];
+  const head=[0x47,0x49,0x46,0x38,0x39,0x61, w&255,w>>8,h&255,h>>8, 0xF7,0,0];
+  parts.push(Uint8Array.from(head), palette);
+  parts.push(Uint8Array.from([0x21,0xFF,0x0B,...'NETSCAPE2.0'.split('').map(c=>c.charCodeAt(0)),0x03,0x01,0,0,0]));
+  let prev=null;
+  const n=frames.length;
+  for(let m=0;m<n;m++){
+    const bn=frames[m], cur=new Uint8Array(w*h);
+    for(let q=0;q<cur.length;q++) cur[q]=lut[bn[q]];
+    frames[m]=null;
+    let x0=0,y0=0,fw=w,fh=h,data=cur;
+    if(prev){
+      let minx=w,miny=h,maxx=-1,maxy=-1;
+      for(let y=0;y<h;y++){
+        const row=y*w;
+        for(let x=0;x<w;x++){
+          if(cur[row+x]!==prev[row+x]){ if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+        }
+      }
+      if(maxx<0){ x0=0;y0=0;fw=1;fh=1;data=Uint8Array.of(255); }
+      else{
+        x0=minx;y0=miny;fw=maxx-minx+1;fh=maxy-miny+1; data=new Uint8Array(fw*fh);
+        for(let y=0;y<fh;y++){
+          const rs=(y0+y)*w+x0, ds=y*fw;
+          for(let x=0;x<fw;x++){ const c=cur[rs+x]; data[ds+x]=(c===prev[rs+x])?255:c; }
+        }
+      }
+    }
+    prev=cur;
+    const cs=Math.max(2,Math.round((m+1)*100/fps)-Math.round(m*100/fps));
+    parts.push(Uint8Array.from([0x21,0xF9,0x04,(1<<2)|(m>0?1:0),cs&255,cs>>8,255,0]));
+    parts.push(Uint8Array.from([0x2C,x0&255,x0>>8,y0&255,y0>>8,fw&255,fw>>8,fh&255,fh>>8,0,8]));
+    parts.push(subBlocks(lzwEncode(data,8)));
+    if(onProg&&(m&7)===7){ onProg((m+1)/n); await new Promise(r=>setTimeout(r,0)); }
+  }
+  parts.push(Uint8Array.of(0x3B));
+  return new Blob(parts,{type:'image/gif'});
+}
+
+/* ------------------------------------------------------------------
+   MP4 マクサー（H.264 / avcC、1トラック、faststart）
+------------------------------------------------------------------ */
+const be32=n=>[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255];
+const be16=n=>[(n>>8)&255,n&255];
+const str4=s=>s.split('').map(c=>c.charCodeAt(0));
+const zeros=n=>new Array(n).fill(0);
+function catBytes(arrs){
+  let len=0; for(const a of arrs) len+=a.length;
+  const o=new Uint8Array(len); let p=0;
+  for(const a of arrs){ o.set(a,p); p+=a.length; }
+  return o;
+}
+function mkBox(type,...kids){
+  const body=catBytes(kids.map(k=>k instanceof Uint8Array?k:Uint8Array.from(k)));
+  return catBytes([Uint8Array.from([...be32(body.length+8),...str4(type)]),body]);
+}
+function muxMp4({width,height,avcC,samples,fps,repeat=1}){
+  const TS=90000, n0=samples.length;
+  const loopDur=[]; for(let k=0;k<n0;k++) loopDur.push(Math.round((k+1)*TS/fps)-Math.round(k*TS/fps));
+  const all=[], durs=[];
+  for(let r=0;r<repeat;r++) for(let k=0;k<n0;k++){ all.push(samples[k]); durs.push(loopDur[k]); }
+  const n=all.length;
+  let total=0; for(const d of durs) total+=d;
+  let dataLen=0; for(const s of all) dataLen+=s.d.length;
+  const matrix=[...be32(0x10000),...zeros(12),...be32(0x10000),...zeros(12),...be32(0x40000000)];
+  const ftyp=mkBox('ftyp',str4('isom'),be32(512),str4('isom'),str4('iso2'),str4('avc1'),str4('mp41'));
+  const build=offset=>{
+    const mvhd=mkBox('mvhd',[0,0,0,0],be32(0),be32(0),be32(TS),be32(total),be32(0x10000),be16(0x100),zeros(10),matrix,zeros(24),be32(2));
+    const tkhd=mkBox('tkhd',[0,0,0,3],be32(0),be32(0),be32(1),be32(0),be32(total),zeros(8),be16(0),be16(0),be16(0),be16(0),matrix,be32(width<<16),be32(height<<16));
+    const mdhd=mkBox('mdhd',[0,0,0,0],be32(0),be32(0),be32(TS),be32(total),be16(0x55C4),be16(0));
+    const hdlr=mkBox('hdlr',[0,0,0,0],be32(0),str4('vide'),zeros(12),[...str4('VideoHandler'),0]);
+    const vmhd=mkBox('vmhd',[0,0,0,1],be16(0),zeros(6));
+    const dinf=mkBox('dinf',mkBox('dref',[0,0,0,0],be32(1),mkBox('url ',[0,0,0,1])));
+    const avc1=mkBox('avc1',zeros(6),be16(1),zeros(4),zeros(12),be16(width),be16(height),be32(0x480000),be32(0x480000),be32(0),be16(1),zeros(32),be16(0x18),be16(0xFFFF),mkBox('avcC',avcC));
+    const stsd=mkBox('stsd',[0,0,0,0],be32(1),avc1);
+    const runs=[]; for(const d of durs){ const l=runs[runs.length-1]; if(l&&l[1]===d) l[0]++; else runs.push([1,d]); }
+    const stts=mkBox('stts',[0,0,0,0],be32(runs.length),...runs.map(r=>[...be32(r[0]),...be32(r[1])]));
+    const keys=[]; for(let k=0;k<n;k++) if(all[k].key) keys.push(k+1);
+    const stss=mkBox('stss',[0,0,0,0],be32(keys.length),...keys.map(be32));
+    const stsc=mkBox('stsc',[0,0,0,0],be32(1),be32(1),be32(n),be32(1));
+    const sizes=new Uint8Array(n*4); for(let k=0;k<n;k++) sizes.set(be32(all[k].d.length),k*4);
+    const stsz=mkBox('stsz',[0,0,0,0],be32(0),be32(n),sizes);
+    const stco=mkBox('stco',[0,0,0,0],be32(1),be32(offset));
+    const stbl=mkBox('stbl',stsd,stts,stss,stsc,stsz,stco);
+    const minf=mkBox('minf',vmhd,dinf,stbl);
+    const mdia=mkBox('mdia',mdhd,hdlr,minf);
+    const trak=mkBox('trak',tkhd,mdia);
+    return mkBox('moov',mvhd,trak);
+  };
+  const moovLen=build(0).length;
+  const moov=build(ftyp.length+moovLen+8);
+  const mdatHead=Uint8Array.from([...be32(dataLen+8),...str4('mdat')]);
+  return new Blob([ftyp,moov,mdatHead,...all.map(s=>s.d)],{type:'video/mp4'});
+}
+/*LIB-END*/
+</script>
+
+<script>
+(() => {
+'use strict';
+const $=s=>document.querySelector(s);
+const tick=()=>new Promise(r=>setTimeout(r,0));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtT=sec=>{ const m=Math.floor(sec/60); return m+':'+(sec-m*60).toFixed(2).padStart(5,'0'); };
+const fmtFps=f=>(Math.abs(f-Math.round(f))<0.005?String(Math.round(f)):f.toFixed(2));
+const fmtSize=b=>b>=1048576?(b/1048576).toFixed(2)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+const CANCEL='__cancel__';
+const MAX_FRAMES=1200;
+
+const S={
+  job:0, file:null, video:null, url:null,
+  vw:0, vh:0, dur:0, fpsSrc:30, fps:30, N:0,
+  frames:[], pw:0, ph:0, D:0, desc:null, P:null, mMed:1, W:3,
+  cands:[], cards:[], sel:-1, a:0, b:1,
+  gpos:0, mainOff:0, paused:false, lastT:0, lastMain:-1,
+  exporting:false, resultUrl:null,
+};
+window.__lc=S;
+
+/* ---------- UI helpers ---------- */
+function show(id,on){ $(id).hidden=!on; }
+function setBusy(msg,p){
+  show('#busy',true); $('#busyMsg').textContent=msg;
+  $('#busyBar').style.width=Math.round(Math.max(0,Math.min(1,p))*100)+'%';
+}
+function showErr(msg){ const e=$('#err'); e.textContent=msg; e.hidden=false; }
+function clearErr(){ $('#err').hidden=true; }
+
+/* ---------- video helpers ---------- */
+function openVideo(file){
+  return new Promise((resolve,reject)=>{
+    const v=document.createElement('video');
+    v.muted=true; v.defaultMuted=true; v.setAttribute('muted',''); v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline','');
+    v.playsInline=true; v.preload='auto'; v.className='hidden-video';
+    const url=URL.createObjectURL(file);
+    let settled=false;
+    const fail=why=>{
+      if(settled) return; settled=true; clearTimeout(to);
+      const err=v.error;
+      const detail=[
+        err?`エラーコード ${err.code}${err.code===4?'（形式またはコーデック非対応）':err.code===3?'（デコード失敗）':err.code===2?'（読み込み失敗）':''}`:why,
+        `ファイル形式: ${file.type||'不明'}`,
+        `再生可否: ${v.canPlayType(file.type||'video/mp4')||'不可'}`
+      ].join(' / ');
+      URL.revokeObjectURL(url); v.remove();
+      reject(new Error('この動画をこのブラウザでは読み込めませんでした。（'+detail+'）'));
+    };
+    const ok=()=>{ if(settled) return; if(!v.videoWidth) return; settled=true; clearTimeout(to); v.onerror=null; resolve({v,url}); };
+    const to=setTimeout(()=>fail('タイムアウト（読み込みが始まりません）'),15000);
+    v.onerror=()=>fail('読み込みエラー');
+    v.onloadedmetadata=ok; v.onloadeddata=ok; v.oncanplay=ok;
+    document.body.appendChild(v);
+    v.src=url;
+    v.load();
+  });
+}
+function seekTo(v,t){
+  return new Promise(res=>{
+    let done=false;
+    const fin=()=>{ if(done) return; done=true; v.removeEventListener('seeked',fin); clearTimeout(to); res(); };
+    const to=setTimeout(fin,4000);
+    v.addEventListener('seeked',fin);
+    v.currentTime=Math.max(0,Math.min(t,(v.duration||t)-0.0005));
+  });
+}
+async function fixDuration(v){
+  if(isFinite(v.duration)) return;
+  await new Promise(r=>{
+    const to=setTimeout(r,3000);
+    v.ontimeupdate=()=>{ if(isFinite(v.duration)){ v.ontimeupdate=null; clearTimeout(to); r(); } };
+    v.currentTime=1e101;
+  });
+  await seekTo(v,0);
+}
+async function detectFps(v){
+  if(!v.requestVideoFrameCallback) return 30;
+  await seekTo(v,0);
+  return new Promise(resolve=>{
+    const times=[]; let done=false;
+    const finish=()=>{
+      if(done) return; done=true; v.pause();
+      const d=[]; for(let i=1;i<times.length;i++){ const x=times[i]-times[i-1]; if(x>0.002) d.push(x); }
+      d.sort((p,q)=>p-q);
+      let f=d.length>=3?1/d[d.length>>1]:30;
+      const snaps=[23.976,24,25,29.97,30,48,50,59.94,60,120];
+      let bs=null,be=0.012;
+      for(const s of snaps){ const e=Math.abs(f-s)/s; if(e<be){ be=e; bs=s; } }
+      if(bs) f=bs;
+      if(!(f>=5&&f<=240)) f=30;
+      resolve(f);
+    };
+    const cb=(now,meta)=>{ times.push(meta.mediaTime); if(times.length>=26) finish(); else v.requestVideoFrameCallback(cb); };
+    v.requestVideoFrameCallback(cb);
+    v.play().catch(finish);
+    setTimeout(finish,2500);
+  });
+}
+
+/* ---------- main pipeline ---------- */
+function resetState(){
+  S.job++;
+  for(const f of S.frames) try{ f.close(); }catch(e){}
+  S.frames=[]; S.cands=[]; S.cards=[]; S.sel=-1; S.desc=null; S.P=null;
+  if(S.video){ S.video.remove(); S.video=null; }
+  if(S.url){ URL.revokeObjectURL(S.url); S.url=null; }
+  if(S.resultUrl){ URL.revokeObjectURL(S.resultUrl); S.resultUrl=null; }
+  $('#result').hidden=true; $('#result').innerHTML='';
+  $('#expProg').hidden=true;
+}
+async function processFile(file){
+  resetState();
+  const job=S.job;
+  S.file=file; clearErr(); show('#results',false); show('#drop',true); show('#adv',true);
+  if(file.type&&!file.type.startsWith('video/')&&!/\.(mp4|mov|m4v|webm)$/i.test(file.name)){
+    showErr('動画ファイルを選んでください。'); return;
+  }
+  try{
+    show('#drop',false); show('#adv',false);
+    setBusy('動画を読み込んでいます…',0);
+    const {v,url}=await openVideo(file);
+    if(job!==S.job){ v.remove(); URL.revokeObjectURL(url); return; }
+    S.video=v; S.url=url;
+    await fixDuration(v);
+    S.vw=v.videoWidth; S.vh=v.videoHeight; S.dur=v.duration;
+    if(!isFinite(S.dur)||S.dur<0.5) throw new Error('動画が短すぎるか、長さを取得できませんでした。');
+    setBusy('フレームレートを調べています…',0.02);
+    S.fpsSrc=await detectFps(v);
+    if(job!==S.job) return;
+    const opt=$('#optFps').value;
+    let fps=opt==='auto'?S.fpsSrc:Math.min(S.fpsSrc,+opt);
+    let N=Math.floor(S.dur*fps);
+    if(N>MAX_FRAMES){ const k=Math.ceil(N/MAX_FRAMES); fps=fps/k; N=Math.floor(S.dur*fps); }
+    if(N<12) throw new Error('動画が短すぎます（解析できるフレームが12枚未満）。');
+    S.fps=fps; S.N=N;
+    await extract(job);
+    await analyzeAndShow(job);
+  }catch(e){
+    if(e&&e.message===CANCEL) return;
+    console.error(e);
+    show('#busy',false); show('#drop',true); show('#adv',true); show('#results',false);
+    showErr(e.message||String(e));
+  }
+}
+async function extract(job){
+  const {N,fps,vw,vh}=S, v=S.video;
+  const asp=vw/vh;
+  /* プレビュー用サイズ（メモリ予算 ~180MB） */
+  let long=480;
+  while(long>96){
+    const w=asp>=1?long:Math.round(long*asp), h=asp>=1?Math.round(long/asp):long;
+    if(N*w*h*4<=180e6) break; long-=24;
+  }
+  const pw=asp>=1?long:Math.max(16,Math.round(long*asp)), ph=asp>=1?Math.max(16,Math.round(long/asp)):long;
+  S.pw=pw; S.ph=ph;
+  /* 解析用の縮小サイズ（総演算量の予算から決める） */
+  const pairs=N*N/2, Dt=1.2e9/pairs;
+  let side=asp>=1?Math.sqrt(Dt*asp/3):Math.sqrt(Dt/(3*asp));
+  side=Math.max(24,Math.min(48,Math.round(side)));
+  const dw=asp>=1?side:Math.max(8,Math.round(side*asp)), dh=asp>=1?Math.max(8,Math.round(side/asp)):side;
+  const D=dw*dh*3; S.D=D;
+  const cap=document.createElement('canvas'); cap.width=pw; cap.height=ph;
+  const cx=cap.getContext('2d',{willReadFrequently:true});
+  const sm=document.createElement('canvas'); sm.width=dw; sm.height=dh;
+  const sx=sm.getContext('2d',{willReadFrequently:true}); sx.imageSmoothingQuality='high';
+  const desc=new Uint8Array(N*D);
+  for(let k=0;k<N;k++){
+    if(job!==S.job) throw new Error(CANCEL);
+    await seekTo(v,(k+0.5)/fps);
+    cx.fillStyle='#fff'; cx.fillRect(0,0,pw,ph);
+    cx.drawImage(v,0,0,pw,ph);
+    S.frames.push(await createImageBitmap(cap));
+    sx.drawImage(cap,0,0,dw,dh);
+    const d=sx.getImageData(0,0,dw,dh).data;
+    let q=k*D; for(let p=0;p<d.length;p+=4){ desc[q++]=d[p]; desc[q++]=d[p+1]; desc[q++]=d[p+2]; }
+    if((k&3)===0){ setBusy(`フレームを読み込んでいます… ${k+1} / ${N}`,0.04+0.46*k/N); await tick(); }
+  }
+  S.desc=desc;
+}
+
+/* ---------- loop analysis ---------- */
+function dist(i,j){
+  const {D,desc}=S; let s=0; const a=i*D,b=j*D;
+  for(let k=0;k<D;k++){ const d=desc[a+k]-desc[b+k]; s+=d<0?-d:d; }
+  return s/D;
+}
+function evalLoop(a,b){
+  const N=S.N, L=b-a+1, j=b+1;
+  if(L<2||j>N-1) return null;
+  let s=0,c=0;
+  for(let k=-S.W;k<=S.W;k++){ const p=a+k,q=j+k; if(p<0||q>N-1||p>=q) continue; s+=dist(p,q); c++; }
+  if(!c) return null;
+  const ml=(S.P[b]-S.P[a])/(L-1);
+  const ratio=(s/c)/(ml+1);
+  return {s:s/c, ratio, mloop:ml, match:Math.round(100*Math.exp(-1.3*ratio))};
+}
+async function findCandidates(job,onProg){
+  const {N,fps,D,desc}=S;
+  const minSec=+$('#optMin').value, maxC=+$('#optMax').value;
+  const W=Math.max(2,Math.min(5,Math.round(fps*0.1))); S.W=W;
+  const step=new Float32Array(N-1);
+  for(let k=0;k<N-1;k++) step[k]=dist(k,k+1);
+  const P=new Float64Array(N); for(let k=0;k<N-1;k++) P[k+1]=P[k]+step[k];
+  S.P=P;
+  const sorted=Array.from(step).sort((x,y)=>x-y);
+  const mMed=sorted[sorted.length>>1]; S.mMed=mMed;
+  const meanStep=P[N-1]/(N-1);
+  const gate=Math.max(0.2,0.25*mMed);
+  const minL=Math.max(4,Math.ceil(minSec*fps));
+  const RMAX=1.0;
+  let cands=[];
+  const dl=new Float32Array(N), pre=new Float64Array(N+1), sm=new Float32Array(N);
+  const totalPairs=Math.max(1,(N-minL)*(N-minL+1)/2); let done=0;
+  for(let L=minL;L<=N-2;L++){
+    const n=N-L;
+    for(let i=0;i<n;i++){
+      const a=i*D,b=(i+L)*D; let s=0;
+      for(let k=0;k<D;k++){ const d=desc[a+k]-desc[b+k]; s+=d<0?-d:d; }
+      dl[i]=s/D;
+    }
+    pre[0]=0; for(let i=0;i<n;i++) pre[i+1]=pre[i]+dl[i];
+    for(let i=0;i<n;i++){
+      const lo=i-W<0?0:i-W, hi=i+W+1>n?n:i+W+1;
+      sm[i]=(pre[hi]-pre[lo])/(hi-lo);
+    }
+    for(let i=0;i<n;i++){
+      const v=sm[i];
+      if(i>0&&v>sm[i-1]) continue;
+      if(i<n-1&&v>=sm[i+1]) continue;
+      const ml=(P[i+L-1]-P[i])/(L-1);
+      if(ml<gate) continue;
+      const ratio=v/(ml+1);
+      if(ratio>=RMAX) continue;
+      cands.push({i,L,s:v,ratio,mloop:ml,rank:(ratio+0.05)*(1+0.3*Math.log2(L/minL))});
+    }
+    if(cands.length>60000){ cands.sort((x,y)=>x.rank-y.rank); cands.length=6000; }
+    done+=n;
+    if((L&7)===0){
+      onProg(Math.min(1,done/totalPairs));
+      await tick();
+      if(job!==S.job) throw new Error(CANCEL);
+    }
+  }
+  cands.sort((x,y)=>x.rank-y.rank);
+  if(cands.length>800) cands.length=800;
+  const same=(a,c)=>{
+    const stride=Math.max(1,Math.floor(a.L/40));
+    const thr=Math.max(1,a.s*2+0.75*mMed);
+    for(let k=0;k<a.L;k+=stride) if(dist(c.i,a.i+k)<thr) return true;
+    return false;
+  };
+  const isDup=(a,c)=>{
+    const tol=Math.max(2,Math.round(0.1*Math.min(a.L,c.L)));
+    const overlap=!(c.i>=a.i+a.L||a.i>=c.i+c.L);
+    if(Math.abs(a.L-c.L)<=tol) return overlap||same(a,c);
+    const r=c.L>a.L?c.L/a.L:a.L/c.L, m=Math.round(r);
+    if(m>=2&&Math.abs(r-m)<0.1*m){
+      if(overlap) return true;
+      return c.L>a.L?same(a,c):same(c,a);   // 別の時刻でも、同じ動きの倍周期なら重複扱い
+    }
+    return false;
+  };
+  /* 倍周期（2周期分・3周期分…）で拾ってしまった候補を、より短い1周期へ差し替える */
+  let shortenBudget=30;
+  const shorten=c=>{
+    let best=c; const lim=c.ratio*1.5+0.12;
+    for(let m=2;m<=8;m++){
+      const base=c.L/m; if(base<minL-0.5) break;
+      const Ls=[Math.floor(base),Math.ceil(base)].filter((x,k,arr)=>x>=minL&&arr.indexOf(x)===k);
+      for(const L2 of Ls){
+        if(Math.abs(L2*m-c.L)>Math.max(2,0.08*c.L)) continue;
+        let bi=null;
+        for(let i2=c.i;i2+L2<=c.i+c.L&&i2+L2<=N-1;i2++){
+          const ev=evalLoop(i2,i2+L2-1);
+          if(!ev||ev.mloop<gate) continue;
+          if(!bi||ev.ratio<bi.ratio) bi={i:i2,L:L2,s:ev.s,ratio:ev.ratio,mloop:ev.mloop};
+        }
+        if(bi&&bi.ratio<=lim&&bi.L<best.L) best=bi;
+      }
+    }
+    return best;
+  };
+  const out=[];
+  const lim=cands.length?Math.max(0.5,cands[0].ratio*3+0.1):0;
+  for(let c of cands){
+    if(out.length>=maxC) break;
+    if(c.ratio>lim) continue;
+    if(out.some(a=>isDup(a,c))) continue;
+    if(shortenBudget>0){
+      shortenBudget--;
+      const sc=shorten(c);
+      if(sc!==c){ c=sc; if(out.some(a=>isDup(a,c))) continue; }
+    }
+    out.push(c);
+  }
+  for(const c of out) c.match=Math.round(100*Math.exp(-1.3*c.ratio));
+  return {cands:out, meanStep};
+}
+async function analyzeAndShow(job){
+  setBusy('ループできる区間を探しています…',0.5);
+  const {cands,meanStep}=await findCandidates(job,p=>setBusy(`ループできる区間を探しています… ${Math.round(p*100)}%`,0.5+0.5*p));
+  if(job!==S.job) throw new Error(CANCEL);
+  S.cands=cands;
+  show('#busy',false);
+  show('#results',true);
+  const f=S.file;
+  $('#srcInfo').innerHTML=`<b></b> ・ ${S.vw}×${S.vh} ・ ${fmtFps(S.fpsSrc)}fps ・ ${S.dur.toFixed(2)}秒 ・ ${S.N}フレームを解析（${fmtFps(S.fps)}fps）`;
+  $('#srcInfo b').textContent=f.name;
+  renderCands(meanStep);
+  setupExportOptions();
+  if(cands.length){ selectCand(0); }
+  else{
+    // 候補が無い場合でも手動調整できるよう全体を初期値にする
+    setRange(0,Math.min(S.N-1,Math.max(1,Math.round(S.fps*1))));
+  }
+  startLoop();
+}
+
+/* ---------- candidates / editor ---------- */
+function badgeClass(m){ return m>=70?'':m>=45?'mid':'low'; }
+function renderCands(meanStep){
+  const box=$('#cands'); box.innerHTML=''; S.cards=[];
+  const note=$('#candNote');
+  if(!S.cands.length){
+    note.textContent=meanStep<0.15
+      ?'動きがほとんどない動画のため、ループ候補を見つけられませんでした。'
+      :'つなぎ目が自然な区間は見つかりませんでした。「最短ループ長」を短くして再検索するか、下で開始・終了を手動で調整してください。';
+    return;
+  }
+  note.textContent='カードをクリックして選択します。全候補がループ再生されています。つなぎ目の一致度が高いほど、繰り返したときに違和感が出にくくなります。';
+  S.cands.forEach((c,n)=>{
+    const el=document.createElement('button'); el.type='button'; el.className='card';
+    const cv=document.createElement('canvas'); cv.width=S.pw; cv.height=S.ph;
+    const info=document.createElement('div'); info.className='ci';
+    info.innerHTML=`<div class="t"><span>候補 ${n+1}</span><span class="badge ${badgeClass(c.match)}">${c.match}%</span></div>
+      <div>${(c.L/S.fps).toFixed(2)}秒 ・ ${c.L}フレーム</div>
+      <div>${fmtT(c.i/S.fps)} → ${fmtT((c.i+c.L)/S.fps)}</div>`;
+    el.append(cv,info);
+    el.addEventListener('click',()=>selectCand(n));
+    box.append(el);
+    S.cards.push({el,cv,cx:cv.getContext('2d'),c,last:-1});
+  });
+}
+function selectCand(n){
+  const c=S.cands[n]; if(!c) return;
+  setRange(c.i,c.i+c.L-1);
+}
+function setRange(a,b){
+  const N=S.N;
+  a=Math.max(0,Math.min(N-2,a)); b=Math.max(a+1,Math.min(N-1,b));
+  S.a=a; S.b=b;
+  S.sel=S.cands.findIndex(c=>c.i===a&&c.i+c.L-1===b);
+  S.mainOff=S.gpos; S.lastMain=-1;
+  updateEditor();
+}
+function updateEditor(){
+  const {a,b,N,fps}=S, L=b-a+1;
+  S.cards.forEach((cd,n)=>cd.el.classList.toggle('on',n===S.sel));
+  const as=$('#aSl'), bs=$('#bSl');
+  as.max=N-2; as.value=a; bs.min=1; bs.max=N-1; bs.value=b;
+  $('#aLbl').textContent=`#${a} ・ ${fmtT(a/fps)}`;
+  $('#bLbl').textContent=`#${b} ・ ${fmtT(b/fps)}（この1枚で折り返し）`;
+  const ev=evalLoop(a,b);
+  let q='';
+  if(ev){
+    const cls=ev.match>=70?'q-hi':ev.match>=45?'q-mid':'q-low';
+    const word=ev.match>=85?'ほぼ継ぎ目なし':ev.match>=70?'自然':ev.match>=45?'少し目立つ':'目立つ';
+    q=`<span>つなぎ目の一致度 <b class="${cls}">${ev.match}%（${word}）</b></span>`;
+  }else{
+    q=`<span>つなぎ目の一致度 <b>—</b>（終了が動画の最後のため判定不可）</span>`;
+  }
+  $('#sum').innerHTML=`<span>長さ <b>${(L/fps).toFixed(2)}秒</b>（${L}フレーム）</span>${q}`;
+  const tl=$('#tlSel'); tl.style.left=(a/N*100)+'%'; tl.style.width=(L/N*100)+'%';
+  updateEstimate();
+}
+$('#ctl').addEventListener('click',e=>{
+  const t=e.target.closest('[data-act]'); if(!t) return;
+  let {a,b}=S; const N=S.N;
+  switch(t.dataset.act){
+    case 'a-': a=Math.max(0,a-1); break;
+    case 'a+': a=Math.min(b-1,a+1); break;
+    case 'b-': b=Math.max(a+1,b-1); break;
+    case 'b+': b=Math.min(N-1,b+1); break;
+    case 's-': if(a>0){a--;b--;} break;
+    case 's+': if(b<N-1){a++;b++;} break;
+  }
+  setRange(a,b);
+});
+$('#aSl').addEventListener('input',e=>{ setRange(Math.min(+e.target.value,S.b-1),S.b); });
+$('#bSl').addEventListener('input',e=>{ setRange(S.a,Math.max(+e.target.value,S.a+1)); });
+$('#play').addEventListener('click',()=>{
+  S.paused=!S.paused; $('#play').textContent=S.paused?'▶':'⏸'; $('#play').setAttribute('aria-label',S.paused?'再生':'一時停止');
+});
+$('#research').addEventListener('click',async()=>{
+  if(!S.desc) return;
+  const job=S.job;
+  show('#results',false); clearErr();
+  try{ await analyzeAndShow(job); }
+  catch(e){ if(e.message!==CANCEL){ show('#busy',false); show('#results',true); showErr(e.message); } }
+});
+$('#again').addEventListener('click',()=>{
+  resetState(); stopLoop(); show('#results',false); show('#busy',false); show('#drop',true); show('#adv',true); clearErr();
+  $('#file').value='';
+});
+
+/* ---------- preview loop ---------- */
+let raf=0;
+function startLoop(){ cancelAnimationFrame(raf); S.lastT=performance.now(); raf=requestAnimationFrame(frame); }
+function stopLoop(){ cancelAnimationFrame(raf); raf=0; }
+function frame(now){
+  raf=requestAnimationFrame(frame);
+  const dt=now-S.lastT; S.lastT=now;
+  if(!S.paused) S.gpos+=dt*S.fps/1000;
+  if(!S.frames.length) return;
+  const mod=(x,L)=>((x%L)+L)%L;
+  for(const cd of S.cards){
+    const idx=Math.floor(mod(S.gpos,cd.c.L));
+    if(idx!==cd.last){ cd.last=idx; cd.cx.drawImage(S.frames[cd.c.i+idx],0,0); }
+  }
+  const L=S.b-S.a+1, idx=Math.floor(mod(S.gpos-S.mainOff,L));
+  if(idx!==S.lastMain){
+    S.lastMain=idx;
+    const cv=$('#pv');
+    if(cv.width!==S.pw||cv.height!==S.ph){ cv.width=S.pw; cv.height=S.ph; }
+    cv.getContext('2d').drawImage(S.frames[S.a+idx],0,0);
+    $('#tlHead').style.left=((S.a+idx)/S.N*100)+'%';
+  }
+}
+
+/* ---------- export options ---------- */
+function curFmt(){ return document.querySelector('input[name=fmt]:checked').value; }
+function setupExportOptions(){
+  const mp4ok=typeof VideoEncoder!=='undefined';
+  const mp4=document.querySelector('input[name=fmt][value=mp4]');
+  mp4.disabled=!mp4ok;
+  $('#mp4note').hidden=mp4ok;
+  if(!mp4ok){ document.querySelector('input[name=fmt][value=gif]').checked=true; }
+  fillOptions(true);
+}
+function fillOptions(reset){
+  const fmt=curFmt(), vw=S.vw;
+  $('#mp4opts').hidden=fmt!=='mp4';
+  const ws=[vw,1920,1280,960,720,480,360,240].filter((w,i,arr)=>w<=vw&&arr.indexOf(w)===i);
+  if(fmt==='mp4') ws.sort((a,b)=>b-a);
+  const wSel=$('#wSel'), prevW=+wSel.value;
+  wSel.innerHTML=ws.map(w=>`<option value="${w}">${w===vw?`元のサイズ（${w}px）`:w+'px'}</option>`).join('');
+  const fpsA=S.fps;
+  let fl=[fpsA,60,50,30,25,24,20,15,12,10].filter(f=>f<=fpsA+0.01&&(fmt!=='gif'||f<=50));
+  fl=fl.filter((f,i)=>fl.findIndex(g=>Math.abs(g-f)<0.01)===i);
+  const fSel=$('#fpsSel'), prevF=+fSel.value;
+  fSel.innerHTML=fl.map(f=>`<option value="${f}">${f===fpsA?`元と同じ（${fmtFps(f)}fps）`:fmtFps(f)+'fps'}</option>`).join('');
+  if(reset){
+    if(fmt==='gif'){
+      const pw=ws.find(w=>w<=480)||ws[ws.length-1]; wSel.value=pw;
+      const pf=fl.find(f=>f<=20+0.01)||fl[fl.length-1]; fSel.value=pf;
+    }else{
+      wSel.value=ws.find(w=>w<=1920)||ws[0]; fSel.value=fl[0];
+    }
+  }else{
+    if(ws.includes(prevW)) wSel.value=prevW;
+    if(fl.some(f=>Math.abs(f-prevF)<0.01)) fSel.value=prevF;
+  }
+  updateEstimate();
+}
+function outDims(){
+  const fmt=curFmt(); let w=+$('#wSel').value||S.vw, h=Math.round(w*S.vh/S.vw);
+  if(fmt==='mp4'){ w&=~1; h&=~1; }
+  return {w:Math.max(2,w),h:Math.max(2,h)};
+}
+function outFrames(){
+  const L=S.b-S.a+1, fo=+$('#fpsSel').value||S.fps;
+  return Math.max(1,Math.round(L*fo/S.fps));
+}
+function updateEstimate(){
+  if(!S.N) return;
+  const {w,h}=outDims(), n=outFrames(), fo=+$('#fpsSel').value||S.fps;
+  const rep=curFmt()==='mp4'?(+$('#repSel').value||1):1;
+  $('#est').textContent=`出力: ${w}×${h} ・ ${n}フレーム ・ ${(n/fo*rep).toFixed(2)}秒`+(rep>1?`（${rep}回分）`:'');
+}
+document.querySelectorAll('input[name=fmt]').forEach(r=>r.addEventListener('change',()=>fillOptions(true)));
+['#wSel','#fpsSel','#repSel'].forEach(s=>$(s).addEventListener('change',updateEstimate));
+
+/* ---------- export ---------- */
+async function grab(job,a,L,fo,ow,oh,cb,prog){
+  const n=Math.max(1,Math.round(L*fo/S.fps));
+  const oc=document.createElement('canvas'); oc.width=ow; oc.height=oh;
+  const ox=oc.getContext('2d',{willReadFrequently:true}); ox.imageSmoothingQuality='high';
+  for(let m=0;m<n;m++){
+    if(job!==S.job) throw new Error(CANCEL);
+    const src=a+Math.min(L-1,Math.floor((m+0.5)*L/n));
+    await seekTo(S.video,(src+0.5)/S.fps);
+    ox.fillStyle='#fff'; ox.fillRect(0,0,ow,oh);
+    ox.drawImage(S.video,0,0,ow,oh);
+    await cb(ox,oc,m,n);
+    prog(m+1,n);
+  }
+  return n;
+}
+function setExpProg(msg,p){
+  $('#expProg').hidden=false; $('#expMsg').textContent=msg; $('#expBar').style.width=Math.round(p*100)+'%';
+}
+async function exportGif(job,a,L,fo,ow,oh){
+  const n0=Math.max(1,Math.round(L*fo/S.fps));
+  if(ow*oh*2*n0>800e6) throw new Error('GIFが大きすぎてメモリに載りません。横幅かフレームレートを下げてください。');
+  const bins=[], hist=new Uint32Array(32768);
+  await grab(job,a,L,fo,ow,oh,(ox)=>{
+    const d=ox.getImageData(0,0,ow,oh).data, bn=new Uint16Array(ow*oh);
+    for(let p=0,q=0;q<bn.length;p+=4,q++){
+      const v=((d[p]>>3)<<10)|((d[p+1]>>3)<<5)|(d[p+2]>>3); bn[q]=v; hist[v]++;
+    }
+    bins.push(bn);
+  },(m,n)=>setExpProg(`フレームを取り込んでいます… ${m} / ${n}`,0.7*m/n));
+  setExpProg('色を決めています…',0.72); await tick();
+  const {palette,lut}=buildPalette(hist,255);
+  setExpProg('GIFを組み立てています…',0.75); await tick();
+  const blob=await encodeGif(ow,oh,bins,fo,palette,lut,p=>setExpProg('GIFを組み立てています…',0.75+0.25*p));
+  return blob;
+}
+async function exportMp4(job,a,L,fo,ow,oh,rep,bpp){
+  if(typeof VideoEncoder==='undefined') throw new Error('このブラウザは MP4 の書き出しに対応していません。Chrome または Edge の最新版でお試しください。');
+  const bitrate=Math.round(Math.max(5e5,Math.min(6e7,ow*oh*fo*bpp)));
+  let cfg=null;
+  for(const codec of ['avc1.640028','avc1.64002A','avc1.640033','avc1.4D0028','avc1.42001F']){
+    const c={codec,width:ow,height:oh,bitrate,framerate:fo,avc:{format:'avc'},latencyMode:'realtime'};
+    try{ const r=await VideoEncoder.isConfigSupported(c); if(r.supported){ cfg=c; break; } }catch(e){}
+  }
+  if(!cfg) throw new Error('このブラウザ／サイズでは H.264 エンコードが使えません。横幅を小さくするか、GIF で書き出してください。');
+  const samples=[]; let avcC=null, encErr=null;
+  const enc=new VideoEncoder({
+    output:(chunk,meta)=>{
+      if(meta&&meta.decoderConfig&&meta.decoderConfig.description) avcC=new Uint8Array(meta.decoderConfig.description.slice?meta.decoderConfig.description.slice(0):meta.decoderConfig.description);
+      const d=new Uint8Array(chunk.byteLength); chunk.copyTo(d);
+      samples.push({d,key:chunk.type==='key'});
+    },
+    error:e=>{ encErr=e; }
+  });
+  enc.configure(cfg);
+  await grab(job,a,L,fo,ow,oh,async(ox,oc,m)=>{
+    if(encErr) throw encErr;
+    const vf=new VideoFrame(oc,{timestamp:Math.round(m*1e6/fo),duration:Math.round(1e6/fo)});
+    enc.encode(vf,{keyFrame:m===0}); vf.close();
+    while(enc.encodeQueueSize>6){ await sleep(4); if(encErr) throw encErr; }
+  },(m,n)=>setExpProg(`エンコード中… ${m} / ${n}`,0.9*m/n));
+  setExpProg('仕上げています…',0.93);
+  await enc.flush(); enc.close();
+  if(encErr) throw encErr;
+  if(!avcC||!samples.length) throw new Error('エンコード結果を取得できませんでした。');
+  return muxMp4({width:ow,height:oh,avcC,samples,fps:fo,repeat:rep});
+}
+$('#go').addEventListener('click',async()=>{
+  if(S.exporting||!S.N) return;
+  S.exporting=true; $('#go').disabled=true;
+  const job=S.job, fmt=curFmt(), a=S.a, L=S.b-S.a+1;
+  const {w,h}=outDims(), fo=+$('#fpsSel').value||S.fps;
+  $('#result').hidden=true;
+  try{
+    setExpProg('準備しています…',0);
+    S.paused=true; $('#play').textContent='▶';
+    let blob;
+    if(fmt==='gif') blob=await exportGif(job,a,L,fo,w,h);
+    else blob=await exportMp4(job,a,L,fo,w,h,+$('#repSel').value||1,+$('#qSel').value||0.2);
+    setExpProg('完了しました',1);
+    showResult(blob,fmt,w,h);
+  }catch(e){
+    if(e&&e.message===CANCEL) return;
+    console.error(e);
+    setExpProg('失敗しました：'+(e.message||e),0);
+  }finally{
+    S.exporting=false; $('#go').disabled=false;
+    S.paused=false; $('#play').textContent='⏸'; $('#play').setAttribute('aria-label','一時停止');
+  }
+});
+function showResult(blob,fmt,w,h){
+  if(S.resultUrl) URL.revokeObjectURL(S.resultUrl);
+  const url=S.resultUrl=URL.createObjectURL(blob);
+  const base=(S.file.name.replace(/\.[^.]+$/,'')||'loop');
+  const name=`${base}_loop_${S.a}-${S.b}.${fmt}`;
+  const box=$('#result'); box.innerHTML='';
+  const media=fmt==='gif'?document.createElement('img'):document.createElement('video');
+  if(fmt==='gif'){ media.src=url; media.alt='変換結果のプレビュー'; }
+  else{ media.src=url; media.loop=true; media.muted=true; media.autoplay=true; media.playsInline=true; media.controls=true; }
+  const info=document.createElement('div'); info.style.fontSize='13px'; info.style.color='var(--muted)';
+  info.textContent=`${fmt.toUpperCase()} ・ ${w}×${h} ・ ${fmtSize(blob.size)}`;
+  const a=document.createElement('a'); a.className='btn pri'; a.href=url; a.download=name; a.textContent='ダウンロード'; a.style.textAlign='center'; a.style.textDecoration='none';
+  box.append(media,info,a); box.hidden=false;
+}
+
+/* ---------- file input / drop ---------- */
+const dz=$('#drop'), fi=$('#file');
+dz.addEventListener('click',()=>fi.click());
+dz.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fi.click(); } });
+fi.addEventListener('change',()=>{ if(fi.files[0]) processFile(fi.files[0]); });
+['dragenter','dragover'].forEach(t=>window.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add('over'); }));
+['dragleave','drop'].forEach(t=>window.addEventListener(t,e=>{ e.preventDefault(); if(t==='drop'||e.target===document.documentElement||!e.relatedTarget) dz.classList.remove('over'); }));
+window.addEventListener('drop',e=>{
+  e.preventDefault(); dz.classList.remove('over');
+  const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f&&!S.exporting) processFile(f);
+});
+})();
+</script>
+</body>
+</html>
+
+</body></html>
